@@ -21,6 +21,8 @@ class ChromeWorker:
         chrome_options.add_experimental_option(
             "excludeSwitches", ["enable-automation"])
         chrome_options.add_experimental_option("useAutomationExtension", False)
+        chrome_options.add_argument('--window-position=0,0')
+        chrome_options.add_argument(f'--window-size={os.getenv("WINDOW_SIZE", "1280,720")}')
         chrome_options.add_argument('--disable-infobars')
         chrome_options.add_argument('--disable-extensions')
         chrome_options.add_argument("--kiosk")
