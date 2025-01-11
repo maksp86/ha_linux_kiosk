@@ -3,7 +3,6 @@ import os
 import time
 import psutil
 from threading import Thread, RLock
-import screen_brightness_control as sbc
 
 
 class SystemWorker:
@@ -17,7 +16,10 @@ class SystemWorker:
         self.lock = RLock()
 
     def _get_brightness(self) -> int:
-        return sbc.get_brightness(display=0)[0]
+        return int(open("/sys/class/backlight/intel_backlight/brightness").read())
+
+    def _set_brightness(self, value: int):
+        open("/sys/class/backlight/intel_backlight/brightness").write(str(value))
 
     def _get_temperature(self) -> float:
         if psutil.WINDOWS:
@@ -55,7 +57,7 @@ class SystemWorker:
 
                 match message["command"]:
                     case "set_brightness":
-                        sbc.set_brightness(message["arg"], display=0)
+                        self._set_brightness(message["arg"])
                     case "reboot":
                         os.system("reboot")
         except Exception as e:

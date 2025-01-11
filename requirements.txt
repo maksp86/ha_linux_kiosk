@@ -2,4 +2,3 @@ selenium
 python-dotenv
 paho-mqtt
 psutil
-screen-brightness-control
