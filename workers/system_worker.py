@@ -16,10 +16,10 @@ class SystemWorker:
         self.lock = RLock()
 
     def _get_brightness(self) -> int:
-        return int(open("/sys/class/backlight/intel_backlight/brightness").read())
+        return int(open("/sys/class/backlight/intel_backlight/brightness", "r").read())
 
     def _set_brightness(self, value: int):
-        open("/sys/class/backlight/intel_backlight/brightness").write(str(value))
+        open("/sys/class/backlight/intel_backlight/brightness", "w").write(str(value))
 
     def _get_temperature(self) -> float:
         if psutil.WINDOWS:
