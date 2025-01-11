@@ -3,13 +3,16 @@ from dotenv import load_dotenv
 import os
 import psutil
 import queue
+import re
+from uuid import getnode
+
 
 from workers.mqtt_worker import MQTTWorker
 from workers.kiosk_worker import ChromeWorker
 from workers.system_worker import SystemWorker
 
 
-def message_loop(system_worker: SystemWorker, chrome_worker: ChromeWorker, message_queue: queue.Queue):
+def message_loop(system_worker: SystemWorker, chrome_worker: ChromeWorker, mqtt_worker: MQTTWorker, message_queue: queue.Queue):
     while True:
         if message_queue.empty():
             continue
@@ -23,18 +26,19 @@ def message_loop(system_worker: SystemWorker, chrome_worker: ChromeWorker, messa
             case "reboot" | "set_brightness":
                 system_worker.push_command(message)
             case "exit":
-                os._exit(0)
+                system_worker.stop()
+                chrome_worker.stop()
+                mqtt_worker.stop()
+                exit()
 
 
 if __name__ == "__main__":
     load_dotenv()
     WORKING_DIRECTORY = os.path.dirname(os.path.realpath(__file__))
 
-    MAC_ADDR = [psutil.net_if_addrs()[interface][0].address
-                for interface in psutil.net_if_addrs()
-                if psutil.net_if_addrs()[interface][0].address][0]
+    MAC_ADDR = ':'.join(re.findall('..', '%012x' % getnode()))
 
-    UNIQUE_ID = "kiosk-" + MAC_ADDR.replace('-', '')[-6:].lower()
+    UNIQUE_ID = "kiosk-" + MAC_ADDR.replace(':', '')[-6:].lower()
 
     MESSAGE_QUEUE = queue.Queue()
 
@@ -49,6 +53,7 @@ if __name__ == "__main__":
     message_thread = Thread(target=message_loop,
                             kwargs={"system_worker": system_worker,
                                     "chrome_worker": chrome_worker,
+                                    "mqtt_worker": mqtt_worker,
                                     "message_queue": MESSAGE_QUEUE},
                             name="message_thread")
 

@@ -64,12 +64,12 @@ class MQTTWorker:
     def _ha_discovery(self, client: mqtt.Client):
         template = {
             "dev": {
-                "identifiers": [self.UNIQUE_ID, self.MAC_ADDR.replace("-", "").lower()],
-                "connections": [["mac", self.MAC_ADDR.replace("-", ":")]],
+                "identifiers": [self.UNIQUE_ID, self.MAC_ADDR.replace(":", "").lower()],
+                "connections": [["mac", self.MAC_ADDR]],
                 "name": f"{platform.node()} kiosk",
                 "manufacturer": "maksp",
                 "model": platform.machine(),
-                "serial_number": self.MAC_ADDR.replace("-", "")[-6:],
+                "serial_number": self.MAC_ADDR.replace(":", "")[-6:],
                 "sw_version": platform.version(),
             },
             "origin": {
