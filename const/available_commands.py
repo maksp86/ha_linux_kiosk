@@ -1,0 +1,1 @@
+AVAILABLE_COMMANDS = ["reload", "reboot", "set_brightness", "exit"]
