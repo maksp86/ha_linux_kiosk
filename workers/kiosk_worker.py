@@ -9,6 +9,125 @@ import os
 import time
 import logging
 from threading import Thread
+from tkinter import font
+import ttkbootstrap as ttk
+
+
+class UICompositor:
+    def __init__(self, working_directory: str, uid: str):
+        self.ui_worker = UIWorker()
+        self.chrome_worker = ChromeWorker(working_directory, uid)
+        self.ifstate = None
+        self.current_worker = None
+
+    def push_command(self, command):
+        if command["command"] == "exit":
+            self.chrome_worker.stop()
+            self.ui_worker.stop()
+        elif command["command"] == "if_state":
+            new_state = command["arg"]
+            if self.ifstate != new_state:
+                self.ifstate = new_state
+
+                if self.current_worker == self.chrome_worker:
+                    self.current_worker.stop()
+
+                if new_state:
+                    if self.current_worker == self.ui_worker:
+                        self.current_worker.push_command(
+                            {"command": "ui_update_status_text",
+                             "arg": ""
+                             })
+                        self.current_worker.push_command(
+                            {"command": "ui_progress_bar_visibility",
+                             "arg": False})
+
+                    self.current_worker = self.chrome_worker
+                else:
+                    self.current_worker = self.ui_worker
+                    self.current_worker.push_command(
+                        {"command": "ui_update_status_text",
+                         "arg": "Waiting for link..."
+                         })
+                    self.current_worker.push_command(
+                        {"command": "ui_progress_bar_visibility",
+                         "arg": True})
+                # if self.current_worker is not None:
+                #     self.current_worker.start()
+                self.current_worker.start()
+        elif self.current_worker is not None:
+            self.current_worker.push_command(command)
+
+
+class UIWorker:
+    def __init__(self):
+        self.terminate = None
+        self.spawn_window = False
+        self.worker_thread = None
+        self.worker_queue = queue.Queue()
+        pass
+
+    def start(self):
+        if self.terminate == False:
+            return
+        self.terminate = False
+        self.spawn_window = True
+        self.worker_thread = Thread(target=self._thread,
+                                    name="UI_thread")
+        self.worker_thread.start()
+
+    def stop(self):
+        if self.terminate:
+            return
+        self.terminate = True
+
+    def push_command(self, command):
+        self.worker_queue.put(command)
+
+    def _init_window(self):
+        window_size = list(map(int, os.getenv("WINDOW_SIZE").split(",")))
+
+        self.window = ttk.Window(themename="darkly",
+                                 position=(0, 0),
+                                 size=(window_size),
+                                 resizable=(False, False),
+                                 overrideredirect=True)
+
+        fontObj = font.Font(size=24, weight="bold")
+
+        self.status_label = ttk.Label(
+            self.window, text="Connecting", justify="center",
+            font=fontObj,
+            wraplength=window_size[0])
+
+        self.status_label.place(width=window_size[0])
+        self.status_label.pack(expand=True)
+
+        self.status_progress_bar = ttk.Floodgauge(self.window,
+                                                  mode="indeterminate",
+                                                  orient="horizontal",
+                                                  bootstyle="dark")
+        self.status_progress_bar.place_forget()
+        self.status_progress_bar.start()
+
+    def _thread(self):
+        self._init_window()
+        while not self.terminate:
+            if not self.worker_queue.empty():
+                message = self.worker_queue.get()
+                if message["command"] == "ui_update_status_text":
+                    self.status_label["text"] = message["arg"]
+                elif message["command"] == "ui_progress_bar_visibility":
+                    if message["arg"]:
+                        self.status_progress_bar.place(rely=0.8, relx=0.5,
+                                                       width=self.window.winfo_width() // 3,
+                                                       anchor="center")
+                    else:
+                        self.status_progress_bar.place_forget()
+
+            self.window.update_idletasks()
+            self.window.update()
+        self.window.quit()
 
 
 class ChromeWorker:
@@ -39,29 +158,30 @@ class ChromeWorker:
         self.chrome_options = chrome_options
         self.terminate = False
 
-        self.worker_thread = Thread(
-            target=self._thread, name="chrome_thread")
+        self.worker_thread = None
 
     def start(self):
         self.terminate = False
+        self.worker_thread = Thread(
+            target=self._thread, name="chrome_thread")
 
         self.worker_thread.start()
 
-        self._logger.debug("started")
+        self._logger.info("started")
 
     def stop(self):
         if self.terminate:
             return
         self.terminate = True
 
-        self._logger.debug("stop requested")
+        self._logger.info("stop requested")
 
     def push_command(self, message):
         self.message_queue.put(message)
 
     def _thread(self):
         try:
-            self._logger.debug("%s thread started", self.worker_thread.name)
+            self._logger.info("%s thread started", self.worker_thread.name)
 
             self.driver = webdriver.Chrome(options=self.chrome_options)
             wait = WebDriverWait(self.driver, 20)
@@ -107,10 +227,9 @@ class ChromeWorker:
 
                 time.sleep(0.5)
 
-            while len(self.driver.window_handles) > 0:
-                self.driver.close()
+            self.driver.quit()
 
-            self._logger.debug("%s thread stopped", self.worker_thread.name)
+            self._logger.info("%s thread stopped", self.worker_thread.name)
         except Exception:
             self._logger.exception("%s fatal exception in thread",
                                    self.worker_thread.name, exc_info=True)

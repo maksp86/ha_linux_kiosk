@@ -55,7 +55,7 @@ class SystemWorker:
 
     def _thread(self):
         try:
-            self._logger.debug("%s thread started", self.worker_thread.name)
+            self._logger.info("%s thread started", self.worker_thread.name)
 
             self.worker_timer.start()
 
@@ -83,4 +83,8 @@ class SystemWorker:
                 }
                 self.message_queue.put(
                     {"command": "sensors_push", "arg": sensors_cache})
+            self.message_queue.put({
+                "command": "if_state",
+                "arg": psutil.net_if_stats()[os.getenv("IFNAME")].isup
+            })
             time.sleep(5)

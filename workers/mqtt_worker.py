@@ -44,17 +44,16 @@ class MQTTWorker:
         self.mqtt_client.will_set(self.AVAILABILITY_TOPIC,
                                   payload="offline", retain=True)
 
-        self.worker_thread = Thread(target=self._timer, name="mqtt_send_timer")
-
     def start(self):
         if self.mqtt_client.is_connected():
             return
 
+        self.worker_thread = Thread(target=self._timer, name="mqtt_send_timer")
         self.mqtt_client.connect_async(os.getenv("MQTT_HOST"),
                                        int(os.getenv("MQTT_PORT")))
 
         self.mqtt_client.loop_start()
-        self._logger.debug("started")
+        self._logger.info("started")
 
     def stop(self):
         if not self.mqtt_client.is_connected():
@@ -62,7 +61,7 @@ class MQTTWorker:
 
         self.mqtt_client.loop_stop()
         self.mqtt_client.disconnect()
-        self._logger.debug("stop requested")
+        self._logger.info("stop requested")
 
     def push_command(self, message):
         self.worker_queue.put(message)
@@ -102,7 +101,7 @@ class MQTTWorker:
                        json.dumps(template), retain=True)
 
     def _on_connect(self, client: mqtt.Client, userdata, flags, reason_code, properties):
-        self._logger.debug(f"mqtt connected with result code {reason_code}")
+        self._logger.info(f"mqtt connected with result code {reason_code}")
         client.subscribe(self.COMMAND_TOPIC)
         client.publish(self.AVAILABILITY_TOPIC, "online", 0, True)
         self._ha_discovery(client)

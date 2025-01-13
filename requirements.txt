@@ -2,3 +2,4 @@ selenium
 python-dotenv
 paho-mqtt
 psutil
+ttkbootstrap

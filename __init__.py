@@ -7,7 +7,7 @@ import logging
 import json
 
 from workers.mqtt_worker import MQTTWorker
-from workers.kiosk_worker import ChromeWorker
+from workers.kiosk_worker import UICompositor
 from workers.system_worker import SystemWorker
 
 logging.basicConfig(filename="kiosk.log",
@@ -28,7 +28,7 @@ def get_mac_by_name(ifname: str):
             return addr.address.replace("-", ":")
 
 
-def message_loop(system_worker: SystemWorker, chrome_worker: ChromeWorker,
+def message_loop(system_worker: SystemWorker, ui_compositor: UICompositor,
                  mqtt_worker: MQTTWorker, message_queue: queue.Queue):
     while True:
         if message_queue.empty():
@@ -37,18 +37,15 @@ def message_loop(system_worker: SystemWorker, chrome_worker: ChromeWorker,
 
         _logger.debug("New message %s", json.dumps(message))
 
-        match message["command"]:
-            case "sensors_push":
-                mqtt_worker.push_command(message)
-            case "reload":
-                chrome_worker.push_command(message)
-            case "reboot" | "set_brightness":
-                system_worker.push_command(message)
-            case "exit":
-                system_worker.stop()
-                chrome_worker.stop()
-                mqtt_worker.stop()
-                exit()
+        ui_compositor.push_command(message)
+
+        if message["command"] == "exit":
+            system_worker.stop()
+            mqtt_worker.stop()
+            exit()
+        else:
+            mqtt_worker.push_command(message)
+            system_worker.push_command(message)
 
 
 if __name__ == "__main__":
@@ -65,17 +62,17 @@ if __name__ == "__main__":
 
     MESSAGE_QUEUE = queue.Queue()
 
-    chrome_worker = ChromeWorker(WORKING_DIRECTORY, UNIQUE_ID)
+    ui_compositor = UICompositor(WORKING_DIRECTORY, UNIQUE_ID)
     system_worker = SystemWorker(MESSAGE_QUEUE)
+
     mqtt_worker = MQTTWorker(UNIQUE_ID, MAC_ADDR, MESSAGE_QUEUE, system_worker)
 
     mqtt_worker.start()
-    chrome_worker.start()
     system_worker.start()
 
     message_thread = Thread(target=message_loop,
                             kwargs={"system_worker": system_worker,
-                                    "chrome_worker": chrome_worker,
+                                    "ui_compositor": ui_compositor,
                                     "mqtt_worker": mqtt_worker,
                                     "message_queue": MESSAGE_QUEUE},
                             name="message_thread")
