@@ -70,7 +70,7 @@ if __name__ == "__main__":
     mqtt_worker = MQTTWorker(UNIQUE_ID, MAC_ADDR, MESSAGE_QUEUE, system_worker)
 
     mqtt_worker.start()
-    # chrome_worker.start()
+    chrome_worker.start()
     system_worker.start()
 
     message_thread = Thread(target=message_loop,
