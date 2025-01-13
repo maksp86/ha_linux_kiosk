@@ -1,4 +1,4 @@
-SENSORS = {
+HA_ENTITIES = {
     "cputemp": {
         "name": "CPU Temperature",
         "unit_of_measurement": "°C",
@@ -6,6 +6,14 @@ SENSORS = {
         "platform": "sensor",
         "entity_category": "diagnostic",
         "value_template": '{{ value_json.cputemp }}',
+    },
+    "uptime": {
+        "name": "System uptime",
+        "unit_of_measurement": "s",
+        "device_class": "duration",
+        "platform": "sensor",
+        "entity_category": "diagnostic",
+        "value_template": '{{ value_json.uptime }}',
     },
     "reboot": {
         "name": "Reboot",

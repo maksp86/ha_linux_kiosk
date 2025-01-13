@@ -7,11 +7,14 @@ from selenium.webdriver.common.by import By
 import queue
 import os
 import time
-from threading import Thread, Timer
+import logging
+from threading import Thread
 
 
 class ChromeWorker:
     def __init__(self, WORKING_DIRECTORY: str, UNIQUE_ID: str):
+        self._logger = logging.getLogger("ChromeWorker")
+
         self.working_directory = WORKING_DIRECTORY
         self.unique_id = UNIQUE_ID
         self.message_queue = queue.Queue()
@@ -22,13 +25,15 @@ class ChromeWorker:
             "excludeSwitches", ["enable-automation"])
         chrome_options.add_experimental_option("useAutomationExtension", False)
         chrome_options.add_argument('--window-position=0,0')
-        chrome_options.add_argument(f'--window-size={os.getenv("WINDOW_SIZE", "1280,720")}')
+        chrome_options.add_argument(
+            f'--window-size={os.getenv("WINDOW_SIZE", "1280,720")}')
         chrome_options.add_argument('--disable-infobars')
         chrome_options.add_argument('--disable-extensions')
         chrome_options.add_argument("--kiosk")
         chrome_options.add_argument("--allow-profiles-outside-user-dir")
         chrome_options.add_argument(
-            f"--user-data-dir={os.path.join(self.working_directory, "driver_data")}")
+            f"--user-data-dir={os.path.join(self.working_directory,
+                                            "driver_data")}")
         chrome_options.add_argument("--profile-directory=kiosk_profile")
 
         self.chrome_options = chrome_options
@@ -42,17 +47,21 @@ class ChromeWorker:
 
         self.worker_thread.start()
 
+        self._logger.debug("started")
+
     def stop(self):
         if self.terminate:
             return
         self.terminate = True
+
+        self._logger.debug("stop requested")
 
     def push_command(self, message):
         self.message_queue.put(message)
 
     def _thread(self):
         try:
-            print(self.worker_thread.name, "thread started")
+            self._logger.debug("%s thread started", self.worker_thread.name)
 
             self.driver = webdriver.Chrome(options=self.chrome_options)
             wait = WebDriverWait(self.driver, 20)
@@ -83,7 +92,9 @@ class ChromeWorker:
 
             while not self.terminate:
                 if len(self.driver.window_handles) > 1:
-                    for handle in [handle for handle in self.driver.window_handles if handle != self.ha_tab]:
+                    for handle in [handle
+                                   for handle in self.driver.window_handles
+                                   if handle != self.ha_tab]:
                         self.driver.switch_to.window(handle)
                         self.driver.close()
 
@@ -99,7 +110,7 @@ class ChromeWorker:
             while len(self.driver.window_handles) > 0:
                 self.driver.close()
 
-            print(self.worker_thread.name, "thread stopped")
-        except Exception as e:
-            print("fatal exception in thread", self.worker_thread.name)
-            print(e)
+            self._logger.debug("%s thread stopped", self.worker_thread.name)
+        except Exception:
+            self._logger.exception("%s fatal exception in thread",
+                                   self.worker_thread.name, exc_info=True)

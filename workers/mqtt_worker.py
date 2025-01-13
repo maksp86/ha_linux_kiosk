@@ -4,15 +4,19 @@ import queue
 import json
 import platform
 import time
-from threading import Thread, RLock
+import logging
+from threading import Thread
 
 from const.available_commands import AVAILABLE_COMMANDS
-from const.sensors import SENSORS
+from const.sensors import HA_ENTITIES
 from workers.system_worker import SystemWorker
 
 
 class MQTTWorker:
-    def __init__(self, UNIQUE_ID: str, MAC_ADDR: str, MESSAGE_QUEUE: queue.Queue, SystemWorker: SystemWorker):
+    def __init__(self, UNIQUE_ID: str, MAC_ADDR: str,
+                 MESSAGE_QUEUE: queue.Queue, SystemWorker: SystemWorker):
+        self._logger = logging.getLogger("MQTTWorker")
+
         self.UNIQUE_ID = UNIQUE_ID
         self.MAC_ADDR = MAC_ADDR
         self.MESSAGE_QUEUE = MESSAGE_QUEUE
@@ -33,7 +37,7 @@ class MQTTWorker:
         self.mqtt_client.on_connect = self._on_connect
         self.mqtt_client.on_message = self._on_message
 
-        if os.getenv("MQTT_USERNAME") != None and os.getenv("MQTT_PASSWORD") != None:
+        if os.getenv("MQTT_USERNAME") is not None and os.getenv("MQTT_PASSWORD") is not None:
             self.mqtt_client.username_pw_set(
                 os.getenv("MQTT_USERNAME"), os.getenv("MQTT_PASSWORD"))
 
@@ -50,6 +54,7 @@ class MQTTWorker:
                                        int(os.getenv("MQTT_PORT")))
 
         self.mqtt_client.loop_start()
+        self._logger.debug("started")
 
     def stop(self):
         if not self.mqtt_client.is_connected():
@@ -57,6 +62,7 @@ class MQTTWorker:
 
         self.mqtt_client.loop_stop()
         self.mqtt_client.disconnect()
+        self._logger.debug("stop requested")
 
     def push_command(self, message):
         self.worker_queue.put(message)
@@ -64,7 +70,9 @@ class MQTTWorker:
     def _ha_discovery(self, client: mqtt.Client):
         template = {
             "dev": {
-                "identifiers": [self.UNIQUE_ID, self.MAC_ADDR.replace(":", "").lower()],
+                "identifiers": [
+                    self.UNIQUE_ID, self.MAC_ADDR.replace(":", "").lower()
+                ],
                 "connections": [["mac", self.MAC_ADDR]],
                 "name": f"{platform.node()} kiosk",
                 "manufacturer": "maksp",
@@ -84,9 +92,9 @@ class MQTTWorker:
             "availability_topic": self.AVAILABILITY_TOPIC
         }
 
-        for sensor in SENSORS:
+        for sensor in HA_ENTITIES:
             template["components"][f"{
-                self.UNIQUE_ID}-{sensor}"] = dict.copy(SENSORS[sensor])
+                self.UNIQUE_ID}-{sensor}"] = dict.copy(HA_ENTITIES[sensor])
             template["components"][f"{
                 self.UNIQUE_ID}-{sensor}"]["unique_id"] = f"{self.UNIQUE_ID}-{sensor}"
 
@@ -94,7 +102,7 @@ class MQTTWorker:
                        json.dumps(template), retain=True)
 
     def _on_connect(self, client: mqtt.Client, userdata, flags, reason_code, properties):
-        print(f"Connected with result code {reason_code}")
+        self._logger.debug(f"mqtt connected with result code {reason_code}")
         client.subscribe(self.COMMAND_TOPIC)
         client.publish(self.AVAILABILITY_TOPIC, "online", 0, True)
         self._ha_discovery(client)
