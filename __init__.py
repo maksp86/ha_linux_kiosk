@@ -4,17 +4,18 @@ import os
 import queue
 import psutil
 import logging
+import time
 import json
 
 from workers.mqtt_worker import MQTTWorker
 from workers.kiosk_worker import UICompositor
 from workers.system_worker import SystemWorker
 
-logging.basicConfig(filename="kiosk.log",
-                    filemode='a',
-                    format='%(asctime)s - (%(levelname)s) [%(name)s]: %(message)s',
+logging.basicConfig(format='%(asctime)s - (%(levelname)s) [%(name)s]: %(message)s',
                     datefmt='%d-%m-%Y %H:%M:%S',
-                    level=logging.INFO)
+                    level=logging.INFO,
+                    handlers=[logging.FileHandler("kiosk.log", mode='a',),
+                              logging.StreamHandler()])
 
 _logger = logging.getLogger("main_thread")
 
@@ -31,6 +32,7 @@ def get_mac_by_name(ifname: str):
 def message_loop(system_worker: SystemWorker, ui_compositor: UICompositor,
                  mqtt_worker: MQTTWorker, message_queue: queue.Queue):
     while True:
+        time.sleep(0.1)
         if message_queue.empty():
             continue
         message = message_queue.get(True)
@@ -65,7 +67,7 @@ if __name__ == "__main__":
     ui_compositor = UICompositor(WORKING_DIRECTORY, UNIQUE_ID)
     system_worker = SystemWorker(MESSAGE_QUEUE)
 
-    mqtt_worker = MQTTWorker(UNIQUE_ID, MAC_ADDR, MESSAGE_QUEUE, system_worker)
+    mqtt_worker = MQTTWorker(UNIQUE_ID, MAC_ADDR, MESSAGE_QUEUE)
 
     mqtt_worker.start()
     system_worker.start()

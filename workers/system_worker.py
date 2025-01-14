@@ -3,6 +3,17 @@ import os
 import time
 import psutil
 import logging
+
+import sdbus
+from sdbus_block.networkmanager import (
+    NetworkManager,
+    NetworkDeviceGeneric,
+    DeviceState,
+    DeviceType,
+    DeviceCapabilities as Capabilities,
+    ActiveConnection,
+    ConnectivityState,
+)
 from threading import Thread, RLock
 
 
@@ -16,7 +27,27 @@ class SystemWorker:
         self.worker_thread = Thread(target=self._thread, name="system_thread")
         self.worker_timer = Thread(target=self._timer, name="system_timer")
         self.terminate = False
-        self.lock = RLock()
+        self.send_message_counter = 0
+        self.last_dev_state = 0
+
+        self.sdbus = sdbus.sd_bus_open_system()
+
+    def _get_iface_state(self):
+
+        nm = NetworkManager(self.sdbus)
+        path = nm.get_device_by_ip_iface(os.getenv("IFNAME"))
+        self.network_dev = NetworkDeviceGeneric(path, self.sdbus)
+
+        active_connection = ""
+        if not self.network_dev.active_connection == "/":
+            active_connection = ActiveConnection(
+                self.network_dev.active_connection, self.sdbus).id
+
+        state = {
+            "state": self.network_dev.state,
+            "name": active_connection
+        }
+        return state
 
     def _get_uptime(self) -> int:
         return int(time.time() - psutil.boot_time())
@@ -60,6 +91,7 @@ class SystemWorker:
             self.worker_timer.start()
 
             while not self.terminate:
+                time.sleep(0.1)
                 if self.worker_queue.empty():
                     continue
                 message = self.worker_queue.get()
@@ -75,7 +107,8 @@ class SystemWorker:
 
     def _timer(self):
         while not self.terminate:
-            with self.lock:
+            time.sleep(2)
+            if self.send_message_counter >= 3:
                 sensors_cache = {
                     "cputemp": self._get_temperature(),
                     "brightness": self._get_brightness(),
@@ -83,8 +116,14 @@ class SystemWorker:
                 }
                 self.message_queue.put(
                     {"command": "sensors_push", "arg": sensors_cache})
-            self.message_queue.put({
-                "command": "if_state",
-                "arg": psutil.net_if_stats()[os.getenv("IFNAME")].isup
-            })
-            time.sleep(5)
+                self.send_message_counter = 0
+            self.send_message_counter += 1
+
+            new_if_state = self._get_iface_state()
+
+            if new_if_state["state"] != self.last_dev_state:
+                self.message_queue.put({
+                    "command": "if_state",
+                    "arg": new_if_state
+                })
+                self.last_dev_state = new_if_state["state"]

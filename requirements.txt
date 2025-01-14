@@ -3,3 +3,5 @@ python-dotenv
 paho-mqtt
 psutil
 ttkbootstrap
+sdbus-networkmanager
+sdbus

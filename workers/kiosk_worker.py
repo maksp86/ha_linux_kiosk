@@ -11,6 +11,7 @@ import logging
 from threading import Thread
 from tkinter import font
 import ttkbootstrap as ttk
+from sdbus_block.networkmanager import DeviceState
 
 
 class UICompositor:
@@ -25,35 +26,45 @@ class UICompositor:
             self.chrome_worker.stop()
             self.ui_worker.stop()
         elif command["command"] == "if_state":
-            new_state = command["arg"]
+            dev_state = DeviceState(command["arg"]["state"])
+
+            label_text = ""
+            progress_visibility = False
+
+            match dev_state:
+                case DeviceState.ACTIVATED:
+                    label_text = f"Connected to {command["arg"]["name"]}"
+                    progress_visibility = False
+                case DeviceState.PREPARE | DeviceState.CONFIG | DeviceState.IP_CONFIG | DeviceState.IP_CHECK:
+                    label_text = f"Connecting to {command["arg"]["name"]}"
+                    progress_visibility = True
+                case DeviceState.DEACTIVATING | DeviceState.DISCONNECTED:
+                    label_text = "Disconnected"
+                    progress_visibility = False
+                case _:
+                    label_text = f"Connection state: {dev_state.name.lower()}"
+                    progress_visibility = False
+
+            self.ui_worker.push_command(
+                {"command": "ui_update_status_text",
+                            "arg": label_text
+                 })
+            self.ui_worker.push_command(
+                {"command": "ui_progress_bar_visibility",
+                    "arg": progress_visibility})
+
+            new_state = dev_state is DeviceState.ACTIVATED
+
             if self.ifstate != new_state:
                 self.ifstate = new_state
-
                 if self.current_worker == self.chrome_worker:
                     self.current_worker.stop()
 
                 if new_state:
-                    if self.current_worker == self.ui_worker:
-                        self.current_worker.push_command(
-                            {"command": "ui_update_status_text",
-                             "arg": ""
-                             })
-                        self.current_worker.push_command(
-                            {"command": "ui_progress_bar_visibility",
-                             "arg": False})
-
                     self.current_worker = self.chrome_worker
                 else:
                     self.current_worker = self.ui_worker
-                    self.current_worker.push_command(
-                        {"command": "ui_update_status_text",
-                         "arg": "Waiting for link..."
-                         })
-                    self.current_worker.push_command(
-                        {"command": "ui_progress_bar_visibility",
-                         "arg": True})
-                # if self.current_worker is not None:
-                #     self.current_worker.start()
+
                 self.current_worker.start()
         elif self.current_worker is not None:
             self.current_worker.push_command(command)
@@ -113,6 +124,7 @@ class UIWorker:
     def _thread(self):
         self._init_window()
         while not self.terminate:
+            time.sleep(0.1)
             if not self.worker_queue.empty():
                 message = self.worker_queue.get()
                 if message["command"] == "ui_update_status_text":
@@ -211,6 +223,7 @@ class ChromeWorker:
                 Keys.ESCAPE).perform()
 
             while not self.terminate:
+                time.sleep(0.5)
                 if len(self.driver.window_handles) > 1:
                     for handle in [handle
                                    for handle in self.driver.window_handles
@@ -224,8 +237,6 @@ class ChromeWorker:
                     match message["command"]:
                         case "reload":
                             self.driver.refresh()
-
-                time.sleep(0.5)
 
             self.driver.quit()
 

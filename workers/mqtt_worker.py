@@ -5,7 +5,7 @@ import json
 import platform
 import time
 import logging
-from threading import Thread
+import threading
 
 from const.available_commands import AVAILABLE_COMMANDS
 from const.sensors import HA_ENTITIES
@@ -14,7 +14,7 @@ from workers.system_worker import SystemWorker
 
 class MQTTWorker:
     def __init__(self, UNIQUE_ID: str, MAC_ADDR: str,
-                 MESSAGE_QUEUE: queue.Queue, SystemWorker: SystemWorker):
+                 MESSAGE_QUEUE: queue.Queue):
         self._logger = logging.getLogger("MQTTWorker")
 
         self.UNIQUE_ID = UNIQUE_ID
@@ -26,10 +26,10 @@ class MQTTWorker:
         self.STATE_TOPIC = self.BASE_TOPIC + "state"
         self.AVAILABILITY_TOPIC = self.BASE_TOPIC + "availability"
 
-        self.systemWorker = SystemWorker
         self.sensors_data = {}
 
         self.worker_queue = queue.Queue()
+        self.worker_thread = None
 
         self.mqtt_client = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2, UNIQUE_ID)
@@ -48,7 +48,8 @@ class MQTTWorker:
         if self.mqtt_client.is_connected():
             return
 
-        self.worker_thread = Thread(target=self._timer, name="mqtt_send_timer")
+        self.worker_thread = threading.Thread(
+            target=self._timer, name="mqtt_send_timer")
         self.mqtt_client.connect_async(os.getenv("MQTT_HOST"),
                                        int(os.getenv("MQTT_PORT")))
 
@@ -120,6 +121,7 @@ class MQTTWorker:
 
     def _timer(self):
         while self.mqtt_client.is_connected():
+            time.sleep(0.1)
             while not self.worker_queue.empty():
                 message = self.worker_queue.get()
                 if message["command"] == "sensors_push":
@@ -128,5 +130,3 @@ class MQTTWorker:
             self.mqtt_client.publish(self.STATE_TOPIC,
                                      json.dumps(self.sensors_data),
                                      retain=True)
-            time.sleep(10)
-        pass
