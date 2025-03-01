@@ -3,18 +3,14 @@ import os
 import time
 import psutil
 import logging
-
+import screen_brightness_control as sbc
 import sdbus
 from sdbus_block.networkmanager import (
     NetworkManager,
     NetworkDeviceGeneric,
-    DeviceState,
-    DeviceType,
-    DeviceCapabilities as Capabilities,
-    ActiveConnection,
-    ConnectivityState,
+    ActiveConnection
 )
-from threading import Thread, RLock
+from threading import Thread
 
 
 class SystemWorker:
@@ -32,8 +28,15 @@ class SystemWorker:
 
         self.sdbus = sdbus.sd_bus_open_system()
 
-    def _get_iface_state(self):
+        self.brightness_target = None
 
+        logging.getLogger('screen_brightness_control').setLevel(logging.FATAL)
+        monitors = [monitor for monitor in sbc.list_monitors_info(
+        ) if monitor["method"] is not sbc.linux.XRandr]
+        if len(monitors) != 0:
+            self.brightness_target = sbc.Display.from_dict(monitors[0])
+
+    def _get_iface_state(self):
         nm = NetworkManager(self.sdbus)
         path = nm.get_device_by_ip_iface(os.getenv("IFNAME"))
         self.network_dev = NetworkDeviceGeneric(path, self.sdbus)
@@ -53,20 +56,26 @@ class SystemWorker:
         return int(time.time() - psutil.boot_time())
 
     def _get_brightness(self) -> int:
-        return int(open("/sys/class/backlight/intel_backlight/brightness",
-                        "r").read())
+        if self.brightness_target:
+            return int(self.brightness_target.get_brightness())
+        else:
+            return 0
 
     def _set_brightness(self, value: int):
-        if value <= 100 and value >= 0:
-            open("/sys/class/backlight/intel_backlight/brightness",
-                 "w").write(str(value))
+        if self.brightness_target and value <= 100 and value >= 0:
+            self.brightness_target.fade_brightness(finish=value, display=self.brightness_target)
 
     def _get_temperature(self) -> float:
         if psutil.WINDOWS:
-            return 0
+            return -1
 
         temps = psutil.sensors_temperatures()
-        return temps["coretemp"][0].current
+
+        if "coretemp" in temps:
+            coretemps = [temp.current for temp in temps["coretemp"]]
+            return sum(coretemps) / len(coretemps)
+        else:
+            return -1
 
     def start(self):
         if self.worker_thread.is_alive():

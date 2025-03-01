@@ -1,4 +1,6 @@
 import paho.mqtt.client as mqtt
+import paho.mqtt.reasoncodes as reasoncodes
+import paho.mqtt.packettypes as packettypes
 import os
 import queue
 import json
@@ -6,10 +8,10 @@ import platform
 import time
 import logging
 import threading
+import __version__
 
 from const.available_commands import AVAILABLE_COMMANDS
 from const.sensors import HA_ENTITIES
-from workers.system_worker import SystemWorker
 
 
 class MQTTWorker:
@@ -32,7 +34,7 @@ class MQTTWorker:
         self.worker_thread = None
 
         self.mqtt_client = mqtt.Client(
-            mqtt.CallbackAPIVersion.VERSION2, UNIQUE_ID)
+            mqtt.CallbackAPIVersion.VERSION2, UNIQUE_ID, protocol=mqtt.MQTTv5)
 
         self.mqtt_client.on_connect = self._on_connect
         self.mqtt_client.on_message = self._on_message
@@ -61,7 +63,8 @@ class MQTTWorker:
             return
 
         self.mqtt_client.loop_stop()
-        self.mqtt_client.disconnect()
+        self.mqtt_client.disconnect(reasoncode=reasoncodes.ReasonCode(
+            packettypes.PacketTypes.DISCONNECT, "Disconnect", 4))
         self._logger.info("stop requested")
 
     def push_command(self, message):
@@ -75,14 +78,14 @@ class MQTTWorker:
                 ],
                 "connections": [["mac", self.MAC_ADDR]],
                 "name": f"{platform.node()} kiosk",
-                "manufacturer": "maksp",
+                "manufacturer": __version__.__author__,
                 "model": platform.machine(),
                 "serial_number": self.MAC_ADDR.replace(":", "")[-6:],
                 "sw_version": platform.version(),
             },
             "origin": {
-                "name": "kiosk-script",
-                "sw_version": "0.1"
+                "name": __version__.__service_name__,
+                "sw_version": __version__.__version__
             },
             "components": {
 

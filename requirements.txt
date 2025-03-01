@@ -5,3 +5,4 @@ psutil
 ttkbootstrap
 sdbus-networkmanager
 sdbus
+screen-brightness-control

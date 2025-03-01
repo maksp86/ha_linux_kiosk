@@ -7,17 +7,13 @@ import logging
 import time
 import json
 
+import __version__
+
 from workers.mqtt_worker import MQTTWorker
 from workers.kiosk_worker import UICompositor
 from workers.system_worker import SystemWorker
 
-logging.basicConfig(format='%(asctime)s - (%(levelname)s) [%(name)s]: %(message)s',
-                    datefmt='%d-%m-%Y %H:%M:%S',
-                    level=logging.INFO,
-                    handlers=[logging.FileHandler("kiosk.log", mode='a',),
-                              logging.StreamHandler()])
-
-_logger = logging.getLogger("main_thread")
+_logger = None
 
 
 def get_mac_by_name(ifname: str):
@@ -53,8 +49,21 @@ def message_loop(system_worker: SystemWorker, ui_compositor: UICompositor,
 if __name__ == "__main__":
     load_dotenv()
 
-    _logger.info("Starting")
-    _logger.info("ENV: %s", os.environ)
+    _log_level = os.getenv("LOG_LEVEL").strip().upper()
+    if _log_level not in logging._nameToLevel:
+        _log_level = logging.WARNING
+
+    logging.basicConfig(format='%(asctime)s - (%(levelname)s) [%(name)s]: %(message)s',
+                        datefmt='%d-%m-%Y %H:%M:%S',
+                        level=_log_level,
+                        handlers=[logging.FileHandler("kiosk.log", mode='a'),
+                                  logging.StreamHandler()])
+
+    _logger = logging.getLogger("main_thread")
+
+    _logger.info("Starting %s, version: %s",
+                 __version__.__service_name__, __version__.__version__)
+    _logger.debug("ENV: %s", os.environ)
 
     WORKING_DIRECTORY = os.path.dirname(os.path.realpath(__file__))
 
